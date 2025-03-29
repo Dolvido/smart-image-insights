@@ -1,0 +1,17 @@
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.9
+pillow==10.2.0
+torch==2.2.0
+torchvision==0.17.0
+transformers==4.37.2
+sentence-transformers==2.5.1
+faiss-cpu==1.8.0
+python-dotenv==1.0.1
+pydantic==2.6.1
+langchain==0.1.5
+langchain-community>=0.0.17
+langchain-core==0.1.22
+opencv-python==4.9.0.80
+pandas==2.2.0
+mangum==0.17.0 

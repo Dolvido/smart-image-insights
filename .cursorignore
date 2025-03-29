@@ -1,0 +1,8 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+venv
+node_modules
+.next
+.env
+
+.env.development.local
+.env.test.local
