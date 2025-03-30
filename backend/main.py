@@ -30,24 +30,30 @@ async def lifespan(app: FastAPI):
     # Initialize ML models
     global object_detector, image_captioner, clip_model, faiss_index, llm
     
-    # Initialize YOLOv5 for object detection
-    object_detector = torch.hub.load('ultralytics/yolov5', 'yolov5s')
-    
-    # Initialize image captioning model
-    image_captioner = pipeline("image-to-text", model="nlpconnect/vit-gpt2-image-captioning")
-    
-    # Initialize CLIP for image embeddings
-    clip_model = SentenceTransformer('clip-ViT-B-32')
-    
-    # Initialize FAISS index for vector search
-    faiss_index = faiss.IndexFlatL2(512)  # CLIP embedding dimension
-    
-    # Initialize LLM for Q&A
-    llm = HuggingFaceHub(
-        repo_id="mistralai/Mistral-7B-Instruct-v0.2",
-        model_kwargs={"temperature": 0.1},
-        huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_TOKEN")
-    )
+    try:
+        # Initialize YOLOv5 for object detection (will download if not cached)
+        object_detector = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True, force_reload=True)
+        
+        # Initialize image captioning model (will download if not cached)
+        image_captioner = pipeline("image-to-text", model="nlpconnect/vit-gpt2-image-captioning")
+        
+        # Initialize CLIP for image embeddings (will download if not cached)
+        clip_model = SentenceTransformer('clip-ViT-B-32')
+        
+        # Initialize FAISS index for vector search
+        faiss_index = faiss.IndexFlatL2(512)  # CLIP embedding dimension
+        
+        # Initialize LLM for Q&A
+        llm = HuggingFaceHub(
+            repo_id="mistralai/Mistral-7B-Instruct-v0.2",
+            model_kwargs={"temperature": 0.1},
+            huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_TOKEN")
+        )
+        
+        logger.info("Successfully initialized all ML models")
+    except Exception as e:
+        logger.error(f"Failed to initialize ML models: {str(e)}")
+        raise e
     
     yield
     

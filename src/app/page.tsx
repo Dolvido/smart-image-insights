@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { ImageUpload } from '@/components/ImageUpload';
 import { ImageQA } from '@/components/ImageQA';
 import { motion } from 'framer-motion';
+import ImageAnalysis from '@/components/ImageAnalysis';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://dolvido-smart-image-insights.hf.space';
 
 interface ImageAnalysis {
   id: string;
@@ -20,9 +21,17 @@ interface ImageAnalysis {
 
 interface SearchResult {
   id: string;
-  image: string;
-  caption: string;
+  imageUrl: string;
   similarity: number;
+  analysis: {
+    objects: Array<{
+      label: string;
+      confidence: number;
+      bbox: [number, number, number, number];
+    }>;
+    caption: string;
+    embedding: number[];
+  };
 }
 
 export default function Home() {
@@ -43,7 +52,7 @@ export default function Home() {
         formData.append('files', file);
       });
 
-      const response = await fetch('/api/analyze', {
+      const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: 'POST',
         body: formData,
       });
@@ -51,13 +60,10 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        if (data.detail?.message && data.detail?.errors) {
-          throw new Error(`${data.detail.message}\n${data.detail.errors.join('\n')}`);
-        }
-        throw new Error(data.error || 'Failed to analyze images');
+        throw new Error(data.detail || 'Failed to analyze images');
       }
 
-      if (data.results.length === 0) {
+      if (!data.results || data.results.length === 0) {
         throw new Error('No images were successfully processed');
       }
 
@@ -94,12 +100,12 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.detail || 'Search failed');
       }
 
-      const results = await response.json();
-      setSearchResults(results);
+      const data = await response.json();
+      setSearchResults(data.results || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {
@@ -137,6 +143,10 @@ export default function Home() {
                 {tech}
               </span>
             ))}
+          </div>
+
+          <div className="bg-white/[0.03] rounded-lg p-6 border border-white/10">
+            <ImageAnalysis />
           </div>
 
           <ImageUpload onImagesSelected={handleImagesSelected} isLoading={isProcessing} />
@@ -220,12 +230,12 @@ export default function Home() {
                       className="bg-white/[0.03] rounded-lg overflow-hidden border border-white/10"
                     >
                       <img
-                        src={`data:image/jpeg;base64,${result.image}`}
-                        alt={result.caption}
+                        src={result.imageUrl}
+                        alt={result.analysis.caption}
                         className="w-full aspect-square object-cover"
                       />
                       <div className="p-4">
-                        <p className="text-sm text-white/70">{result.caption}</p>
+                        <p className="text-sm text-white/70">{result.analysis.caption}</p>
                         <p className="text-xs text-white/50 mt-2">
                           Similarity: {Math.round(result.similarity * 100)}%
                         </p>

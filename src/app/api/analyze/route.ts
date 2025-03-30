@@ -1,46 +1,36 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+// Direct URL to the API
+const HUGGINGFACE_API = 'https://dolvido-smart-image-insights.hf.space/analyze';
 
-export async function POST(request: Request) {
-  try {
-    const formData = await request.formData();
-    const files = formData.getAll('files');
+// Force Node.js runtime
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-    if (!files.length) {
-      return NextResponse.json(
-        { error: 'No images provided' },
-        { status: 400 }
-      );
-    }
+// Add OPTIONS handler for CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
 
-    // Create a new FormData instance for the Python backend
-    const backendFormData = new FormData();
-    files.forEach((file) => {
-      backendFormData.append('files', file);
-    });
-
-    // Send to Python backend
-    const response = await fetch(`${BACKEND_URL}/analyze`, {
-      method: 'POST',
-      body: backendFormData,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(
-        data,
-        { status: response.status }
-      );
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Error processing images:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process images' },
-      { status: 500 }
-    );
-  }
+// Return a hardcoded mock response without any request handling
+export function POST() {
+  return Response.json({
+    results: [{
+      id: '1',
+      objects: [
+        { label: 'Mock Object 1', confidence: 0.95 },
+        { label: 'Mock Object 2', confidence: 0.85 }
+      ],
+      caption: 'This is a mock caption for testing',
+      text_detected: false
+    }]
+  });
 } 

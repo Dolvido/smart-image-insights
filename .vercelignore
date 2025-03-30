@@ -1,0 +1,8 @@
+backend/venv
+backend/__pycache__
+backend/yolov5s.pt
+node_modules
+.env
+.env.local
+**/*.pyc
+**/__pycache__/ 

@@ -7,7 +7,7 @@ interface ImageQAProps {
   imageId: string;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://dolvido-smart-image-insights.hf.space';
 
 export function ImageQA({ imageId }: ImageQAProps) {
   const [question, setQuestion] = useState('');
@@ -23,24 +23,31 @@ export function ImageQA({ imageId }: ImageQAProps) {
     setError(null);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/ask`, {
+      // Since we don't have a direct QA endpoint, we'll use the search endpoint
+      // with the image ID and question to get relevant information
+      const response = await fetch(`${BACKEND_URL}/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          image_id: imageId,
-          question: question.trim(),
+          query: question.trim(),
+          top_k: 1,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to get answer');
       }
 
       const data = await response.json();
-      setAnswer(data.answer);
+      if (!data.results || data.results.length === 0) {
+        throw new Error('No relevant information found');
+      }
+
+      // Use the caption as the answer since we don't have a dedicated QA model
+      setAnswer(data.results[0].analysis.caption);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get answer');
     } finally {
