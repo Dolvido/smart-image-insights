@@ -17,7 +17,9 @@ const nextConfig = {
   // Force API endpoints to use Node.js runtime
   serverRuntimeConfig: {
     apiRuntimeOverride: 'nodejs',
-  }
+  },
+  // Set the src directory as the default app directory
+  distDir: '.next'
 };
 
 module.exports = nextConfig; 
