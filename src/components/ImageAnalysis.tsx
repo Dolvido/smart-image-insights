@@ -45,78 +45,62 @@ export default function ImageAnalysis() {
     setError(null);
 
     try {
-      // Convert image to base64
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        try {
-          const base64Image = reader.result as string;
-          const imageData = base64Image.split(',')[1];
-
-          console.log('Sending request to Hugging Face API...');
-          
-          // Send request directly to Hugging Face Space API
-          const response = await fetch('https://dolvido-smart-image-insights.hf.space/analyze', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              image: imageData,
-              analysis_type: 'all'
-            }),
-          });
-
-          console.log('Response status:', response.status);
-          
-          // Get the response text first for better error debugging
-          const responseText = await response.text();
-          
-          if (!response.ok) {
-            throw new Error(`Failed to analyze image (${response.status}): ${responseText.substring(0, 100)}`);
-          }
-          
-          // Parse the JSON response
-          let data;
-          try {
-            data = JSON.parse(responseText);
-            setResults(data);
-          } catch (parseError) {
-            throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-          }
-        } catch (requestError) {
-          console.error('API request error:', requestError);
-          setError(`${requestError instanceof Error ? requestError.message : 'Failed to analyze image'} - Using mock data instead`);
-          
-          // Use mock data as fallback
-          setTimeout(() => {
-            setResults({
-              object_detection: [
-                { class: "person", confidence: 0.95 },
-                { class: "car", confidence: 0.87 },
-                { class: "tree", confidence: 0.76 }
-              ],
-              image_classification: [
-                { label: "urban scene", confidence: 0.92 },
-                { label: "street", confidence: 0.89 },
-                { label: "city", confidence: 0.85 }
-              ],
-              text_detection: {
-                text: "Sample detected text from the image"
-              }
-            });
-            setLoading(false);
-          }, 1500);
-        }
-      };
+      console.log('Preparing to send image to API...');
       
-      reader.onerror = () => {
-        setError('Failed to read the image file');
-        setLoading(false);
-      };
+      // Create a FormData object instead of using base64
+      const formData = new FormData();
+      formData.append('files', file);
+      formData.append('analysis_type', 'all');
+      
+      console.log('Sending request to Hugging Face API...');
+      
+      // Send request directly to Hugging Face Space API with FormData
+      const response = await fetch('https://dolvido-smart-image-insights.hf.space/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      console.log('Response status:', response.status);
+      
+      // Get the response text first for better error debugging
+      const responseText = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to analyze image (${response.status}): ${responseText.substring(0, 100)}`);
+      }
+      
+      // Parse the JSON response
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        setResults(data);
+      } catch (parseError) {
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+      }
+      
     } catch (err) {
-      console.error('Overall error:', err);
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      console.error('API request error:', err);
+      setError(`${err instanceof Error ? err.message : 'Failed to analyze image'} - Using mock data instead`);
+      
+      // Use mock data as fallback
+      setTimeout(() => {
+        setResults({
+          object_detection: [
+            { class: "person", confidence: 0.95 },
+            { class: "car", confidence: 0.87 },
+            { class: "tree", confidence: 0.76 }
+          ],
+          image_classification: [
+            { label: "urban scene", confidence: 0.92 },
+            { label: "street", confidence: 0.89 },
+            { label: "city", confidence: 0.85 }
+          ],
+          text_detection: {
+            text: "Sample detected text from the image"
+          }
+        });
+      }, 1500);
+    } finally {
       setLoading(false);
     }
   };
