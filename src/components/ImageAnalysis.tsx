@@ -73,8 +73,27 @@ export default function ImageAnalysis() {
       let data;
       try {
         data = JSON.parse(responseText);
+        console.log('API Response Data:', data);
+        
+        // Check if data has the expected structure
+        if (!data.object_detection && !data.image_classification && !data.text_detection) {
+          console.warn('API response missing expected fields, transforming data structure...');
+          
+          // The API might return data in a different structure, try to adapt it
+          if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+            // If the response has a results array, use the first item
+            console.log('Using first item from results array:', data.results[0]);
+            data = data.results[0];
+          } else {
+            console.error('Cannot find valid results in the API response');
+            throw new Error('Invalid data structure in API response');
+          }
+        }
+        
+        console.log('Final processed data:', data);
         setResults(data);
       } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
         throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
       }
       
@@ -84,7 +103,7 @@ export default function ImageAnalysis() {
       
       // Use mock data as fallback
       setTimeout(() => {
-        setResults({
+        const mockData = {
           object_detection: [
             { class: "person", confidence: 0.95 },
             { class: "car", confidence: 0.87 },
@@ -98,12 +117,18 @@ export default function ImageAnalysis() {
           text_detection: {
             text: "Sample detected text from the image"
           }
-        });
+        };
+        
+        console.log('Using mock data:', mockData);
+        setResults(mockData);
       }, 1500);
     } finally {
       setLoading(false);
     }
   };
+
+  // Add debugging for results state
+  console.log('Current results state:', results);
 
   return (
     <div className="flex flex-col items-center w-full h-full">
