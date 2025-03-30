@@ -31,7 +31,8 @@ model_states: Dict = {
     "image_captioner": None,
     "clip_model": None,
     "faiss_index": None,
-    "initialization_started": False
+    "initialization_started": False,
+    "initialization_errors": []
 }
 
 # Store uploaded images and their analysis
@@ -47,7 +48,9 @@ def get_object_detector():
         model.eval()  # Set to evaluation mode
         return model
     except Exception as e:
-        logger.error(f"Error loading YOLOv5 model: {str(e)}")
+        error_msg = f"Error loading YOLOv5 model: {str(e)}"
+        logger.error(error_msg)
+        model_states["initialization_errors"].append(error_msg)
         raise
 
 @lru_cache(maxsize=1)
@@ -57,7 +60,9 @@ def get_image_captioner():
         logger.info("Loading BLIP model...")
         return pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
     except Exception as e:
-        logger.error(f"Error loading BLIP model: {str(e)}")
+        error_msg = f"Error loading BLIP model: {str(e)}"
+        logger.error(error_msg)
+        model_states["initialization_errors"].append(error_msg)
         raise
 
 @lru_cache(maxsize=1)
@@ -67,13 +72,16 @@ def get_clip_model():
         logger.info("Loading CLIP model...")
         return SentenceTransformer('clip-ViT-B-32')
     except Exception as e:
-        logger.error(f"Error loading CLIP model: {str(e)}")
+        error_msg = f"Error loading CLIP model: {str(e)}"
+        logger.error(error_msg)
+        model_states["initialization_errors"].append(error_msg)
         raise
 
 # Initialize models in background
 async def initialize_models(background_tasks: BackgroundTasks):
     if not model_states["initialization_started"]:
         model_states["initialization_started"] = True
+        model_states["initialization_errors"] = []
         try:
             logger.info("Starting model initialization...")
             start_time = time.time()
@@ -83,21 +91,27 @@ async def initialize_models(background_tasks: BackgroundTasks):
                 model_states["object_detector"] = get_object_detector()
                 logger.info("YOLOv5 model loaded successfully")
             except Exception as e:
-                logger.error(f"Failed to load YOLOv5 model: {str(e)}")
+                error_msg = f"Failed to load YOLOv5 model: {str(e)}"
+                logger.error(error_msg)
+                model_states["initialization_errors"].append(error_msg)
                 model_states["object_detector"] = None
 
             try:
                 model_states["image_captioner"] = get_image_captioner()
                 logger.info("BLIP model loaded successfully")
             except Exception as e:
-                logger.error(f"Failed to load BLIP model: {str(e)}")
+                error_msg = f"Failed to load BLIP model: {str(e)}"
+                logger.error(error_msg)
+                model_states["initialization_errors"].append(error_msg)
                 model_states["image_captioner"] = None
 
             try:
                 model_states["clip_model"] = get_clip_model()
                 logger.info("CLIP model loaded successfully")
             except Exception as e:
-                logger.error(f"Failed to load CLIP model: {str(e)}")
+                error_msg = f"Failed to load CLIP model: {str(e)}"
+                logger.error(error_msg)
+                model_states["initialization_errors"].append(error_msg)
                 model_states["clip_model"] = None
 
             model_states["faiss_index"] = faiss.IndexFlatL2(512)
@@ -106,7 +120,9 @@ async def initialize_models(background_tasks: BackgroundTasks):
             end_time = time.time()
             logger.info(f"Model initialization completed in {end_time - start_time:.2f} seconds")
         except Exception as e:
-            logger.error(f"Error during model initialization: {str(e)}")
+            error_msg = f"Error during model initialization: {str(e)}"
+            logger.error(error_msg)
+            model_states["initialization_errors"].append(error_msg)
             model_states["is_initialized"] = False
             raise HTTPException(status_code=500, detail="Failed to initialize models")
 
@@ -144,7 +160,10 @@ async def startup_event():
 @app.post("/analyze")
 async def analyze_images(files: List[UploadFile] = File(...)):
     if not model_states["is_initialized"]:
-        raise HTTPException(status_code=503, detail="Models are still initializing. Please try again in a few moments.")
+        error_msg = "Models are still initializing. Please try again in a few moments."
+        if model_states["initialization_errors"]:
+            error_msg += f" Initialization errors: {', '.join(model_states['initialization_errors'])}"
+        raise HTTPException(status_code=503, detail=error_msg)
 
     try:
         logger.info(f"Received {len(files)} files for analysis")
@@ -161,6 +180,7 @@ async def analyze_images(files: List[UploadFile] = File(...)):
 
                 # Object detection with error handling
                 objects = []
+                obj_detection_error = None
                 if model_states["object_detector"]:
                     try:
                         results_detection = model_states["object_detector"](image)
@@ -175,25 +195,40 @@ async def analyze_images(files: List[UploadFile] = File(...)):
                             for *box, conf, cls_id in pred
                         ]
                     except Exception as e:
-                        logger.error(f"Object detection failed: {str(e)}")
+                        obj_detection_error = str(e)
+                        logger.error(f"Object detection failed: {obj_detection_error}")
                         objects = []
+                else:
+                    obj_detection_error = "Object detection model not initialized"
 
                 # Image captioning with error handling
                 caption = "Failed to generate caption"
+                caption_error = None
                 if model_states["image_captioner"]:
                     try:
-                        caption = model_states["image_captioner"](image)[0]['generated_text']
+                        caption_result = model_states["image_captioner"](image)
+                        if caption_result and len(caption_result) > 0:
+                            caption = caption_result[0]['generated_text']
+                        else:
+                            caption_error = "Empty caption result"
                     except Exception as e:
-                        logger.error(f"Image captioning failed: {str(e)}")
+                        caption_error = str(e)
+                        logger.error(f"Image captioning failed: {caption_error}")
+                else:
+                    caption_error = "Image captioning model not initialized"
 
                 # Generate embedding
                 embedding = []
+                embedding_error = None
                 if model_states["clip_model"]:
                     try:
                         embedding = model_states["clip_model"].encode(image).tolist()
                         model_states["faiss_index"].add(np.array([embedding], dtype=np.float32))
                     except Exception as e:
-                        logger.error(f"Embedding generation failed: {str(e)}")
+                        embedding_error = str(e)
+                        logger.error(f"Embedding generation failed: {embedding_error}")
+                else:
+                    embedding_error = "CLIP model not initialized"
 
                 # Store results
                 image_base64 = base64.b64encode(contents).decode('utf-8')
@@ -210,7 +245,12 @@ async def analyze_images(files: List[UploadFile] = File(...)):
                     "id": image_id,
                     "imageUrl": f"data:image/jpeg;base64,{image_base64}",
                     "objects": objects,
-                    "caption": caption
+                    "caption": caption,
+                    "errors": {
+                        "object_detection": obj_detection_error,
+                        "captioning": caption_error,
+                        "embedding": embedding_error
+                    }
                 })
 
             except Exception as e:
@@ -260,7 +300,10 @@ async def search_images(query: SearchQuery):
 @app.post("/analyze-base64")
 async def analyze_base64_image(request: ImageBase64Request):
     if not model_states["is_initialized"]:
-        raise HTTPException(status_code=503, detail="Models are still initializing. Please try again in a few moments.")
+        error_msg = "Models are still initializing. Please try again in a few moments."
+        if model_states["initialization_errors"]:
+            error_msg += f" Initialization errors: {', '.join(model_states['initialization_errors'])}"
+        raise HTTPException(status_code=503, detail=error_msg)
 
     try:
         logger.info(f"Received base64 image for analysis")
@@ -277,6 +320,7 @@ async def analyze_base64_image(request: ImageBase64Request):
 
             # Object detection with error handling
             objects = []
+            obj_detection_error = None
             if model_states["object_detector"]:
                 try:
                     results_detection = model_states["object_detector"](image)
@@ -291,25 +335,40 @@ async def analyze_base64_image(request: ImageBase64Request):
                         for *box, conf, cls_id in pred
                     ]
                 except Exception as e:
-                    logger.error(f"Object detection failed: {str(e)}")
+                    obj_detection_error = str(e)
+                    logger.error(f"Object detection failed: {obj_detection_error}")
                     objects = []
+            else:
+                obj_detection_error = "Object detection model not initialized"
 
             # Image captioning with error handling
             caption = "Failed to generate caption"
+            caption_error = None
             if model_states["image_captioner"]:
                 try:
-                    caption = model_states["image_captioner"](image)[0]['generated_text']
+                    caption_result = model_states["image_captioner"](image)
+                    if caption_result and len(caption_result) > 0:
+                        caption = caption_result[0]['generated_text']
+                    else:
+                        caption_error = "Empty caption result"
                 except Exception as e:
-                    logger.error(f"Image captioning failed: {str(e)}")
+                    caption_error = str(e)
+                    logger.error(f"Image captioning failed: {caption_error}")
+            else:
+                caption_error = "Image captioning model not initialized"
 
             # Generate embedding
             embedding = []
+            embedding_error = None
             if model_states["clip_model"]:
                 try:
                     embedding = model_states["clip_model"].encode(image).tolist()
                     model_states["faiss_index"].add(np.array([embedding], dtype=np.float32))
                 except Exception as e:
-                    logger.error(f"Embedding generation failed: {str(e)}")
+                    embedding_error = str(e)
+                    logger.error(f"Embedding generation failed: {embedding_error}")
+            else:
+                embedding_error = "CLIP model not initialized"
 
             # Store results
             image_base64 = request.image
@@ -326,7 +385,12 @@ async def analyze_base64_image(request: ImageBase64Request):
                 "id": image_id,
                 "imageUrl": f"data:image/jpeg;base64,{image_base64}",
                 "objects": objects,
-                "caption": caption
+                "caption": caption,
+                "errors": {
+                    "object_detection": obj_detection_error,
+                    "captioning": caption_error,
+                    "embedding": embedding_error
+                }
             })
 
         except Exception as e:
@@ -346,5 +410,6 @@ async def analyze_base64_image(request: ImageBase64Request):
 async def health_check():
     return {
         "status": "healthy",
-        "models_initialized": model_states["is_initialized"]
+        "models_initialized": model_states["is_initialized"],
+        "initialization_errors": model_states["initialization_errors"] if model_states["initialization_errors"] else None
     } 
