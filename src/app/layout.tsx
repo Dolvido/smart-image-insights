@@ -5,12 +5,6 @@ export const metadata: Metadata = {
   title: "Smart Image Insights | AI-Powered Image Analysis",
   description: "Upload your images and get instant AI-powered analysis, object detection, and interactive Q&A.",
   keywords: ["AI", "image analysis", "object detection", "computer vision", "machine learning"],
-  icons: {
-    icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-    ],
-    apple: { url: '/favicon.ico' },
-  },
 };
 
 export default function RootLayout({
