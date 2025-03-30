@@ -7,7 +7,7 @@ from PIL import Image
 import io
 import base64
 import numpy as np
-from transformers import pipeline
+from transformers import pipeline, AutoFeatureExtractor, AutoProcessor, AutoModel, AutoTokenizer
 from sentence_transformers import SentenceTransformer
 import faiss
 import os
@@ -130,6 +130,11 @@ class SearchQuery(BaseModel):
     query: str
     top_k: int = 5
 
+# New endpoint for base64 encoded images
+class ImageBase64Request(BaseModel):
+    image: str
+    filename: str = "image.jpg"
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize models on startup"""
@@ -191,8 +196,9 @@ async def analyze_images(files: List[UploadFile] = File(...)):
                         logger.error(f"Embedding generation failed: {str(e)}")
 
                 # Store results
+                image_base64 = base64.b64encode(contents).decode('utf-8')
                 uploaded_images[image_id] = {
-                    "image": base64.b64encode(contents).decode('utf-8'),
+                    "image": image_base64,
                     "analysis": {
                         "objects": objects,
                         "caption": caption,
@@ -202,7 +208,7 @@ async def analyze_images(files: List[UploadFile] = File(...)):
 
                 results.append({
                     "id": image_id,
-                    "imageUrl": f"data:image/jpeg;base64,{base64.b64encode(contents).decode('utf-8')}",
+                    "imageUrl": f"data:image/jpeg;base64,{image_base64}",
                     "objects": objects,
                     "caption": caption
                 })
@@ -248,6 +254,91 @@ async def search_images(query: SearchQuery):
         
     except Exception as e:
         logger.error(f"Search failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# New endpoint for base64 encoded images
+@app.post("/analyze-base64")
+async def analyze_base64_image(request: ImageBase64Request):
+    if not model_states["is_initialized"]:
+        raise HTTPException(status_code=503, detail="Models are still initializing. Please try again in a few moments.")
+
+    try:
+        logger.info(f"Received base64 image for analysis")
+        results = []
+        errors = []
+
+        try:
+            # Decode base64 image
+            image_data = base64.b64decode(request.image)
+            image = Image.open(io.BytesIO(image_data))
+            
+            # Generate unique ID
+            image_id = str(uuid.uuid4())
+
+            # Object detection with error handling
+            objects = []
+            if model_states["object_detector"]:
+                try:
+                    results_detection = model_states["object_detector"](image)
+                    pred = results_detection.pred[0]
+                    names = results_detection.names
+                    objects = [
+                        {
+                            "label": names[int(cls_id)],
+                            "confidence": float(conf),
+                            "bbox": [float(x) for x in box]
+                        }
+                        for *box, conf, cls_id in pred
+                    ]
+                except Exception as e:
+                    logger.error(f"Object detection failed: {str(e)}")
+                    objects = []
+
+            # Image captioning with error handling
+            caption = "Failed to generate caption"
+            if model_states["image_captioner"]:
+                try:
+                    caption = model_states["image_captioner"](image)[0]['generated_text']
+                except Exception as e:
+                    logger.error(f"Image captioning failed: {str(e)}")
+
+            # Generate embedding
+            embedding = []
+            if model_states["clip_model"]:
+                try:
+                    embedding = model_states["clip_model"].encode(image).tolist()
+                    model_states["faiss_index"].add(np.array([embedding], dtype=np.float32))
+                except Exception as e:
+                    logger.error(f"Embedding generation failed: {str(e)}")
+
+            # Store results
+            image_base64 = request.image
+            uploaded_images[image_id] = {
+                "image": image_base64,
+                "analysis": {
+                    "objects": objects,
+                    "caption": caption,
+                    "embedding": embedding
+                }
+            }
+
+            results.append({
+                "id": image_id,
+                "imageUrl": f"data:image/jpeg;base64,{image_base64}",
+                "objects": objects,
+                "caption": caption
+            })
+
+        except Exception as e:
+            errors.append(f"Failed to process image: {str(e)}")
+
+        return {
+            "results": results,
+            "errors": errors if errors else None
+        }
+
+    except Exception as e:
+        logger.error(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Health check endpoint
