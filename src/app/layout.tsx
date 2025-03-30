@@ -6,9 +6,10 @@ export const metadata: Metadata = {
   description: "Upload your images and get instant AI-powered analysis, object detection, and interactive Q&A.",
   keywords: ["AI", "image analysis", "object detection", "computer vision", "machine learning"],
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: { url: '/favicon.ico' },
   },
 };
 
