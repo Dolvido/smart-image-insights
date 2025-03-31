@@ -45,6 +45,8 @@ def get_object_detector():
     try:
         logger.info("Loading YOLOv5 model...")
         model = torch.hub.load('ultralytics/yolov5', 'yolov5n', pretrained=True)
+        model.conf = 0.25  # Lower confidence threshold (default is 0.45)
+        model.iou = 0.45   # IOU threshold
         model.eval()  # Set to evaluation mode
         return model
     except Exception as e:

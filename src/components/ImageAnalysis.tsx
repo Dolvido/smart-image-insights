@@ -122,7 +122,7 @@ export default function ImageAnalysis() {
                     class: obj.label || obj.class,
                     confidence: obj.confidence || 0.9
                   })) 
-                : [{ class: "image", confidence: 0.99 }],
+                : [],
               
               image_classification: [
                 { label: firstResult.caption || "Unknown", confidence: 0.95 }
@@ -165,12 +165,10 @@ export default function ImageAnalysis() {
             { class: "tree", confidence: 0.76 }
           ],
           image_classification: [
-            { label: "urban scene", confidence: 0.92 },
-            { label: "street", confidence: 0.89 },
-            { label: "city", confidence: 0.85 }
+            { label: "urban scene", confidence: 0.92 }
           ],
           text_detection: {
-            text: "Sample detected text from the image"
+            text: "A person standing next to a car with trees in the background"
           }
         };
         
@@ -259,11 +257,7 @@ export default function ImageAnalysis() {
                     <div className="bg-gray-900/50 rounded-lg shadow-md p-6">
                       <h3 className="text-xl font-semibold mb-4 text-white">Object Detection</h3>
                       {image.results.object_detection.length === 0 ? (
-                        <p className="text-gray-400">No specific objects detected in this image.</p>
-                      ) : image.results.object_detection.length === 1 && image.results.object_detection[0].class === "image" ? (
-                        <div className="bg-gray-800/80 rounded-lg p-4">
-                          <p className="text-gray-300">This appears to be a digital illustration or artwork.</p>
-                        </div>
+                        <p className="text-gray-400">No objects detected. YOLO model couldn't identify specific items in this image.</p>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {image.results.object_detection.map((obj, index) => (

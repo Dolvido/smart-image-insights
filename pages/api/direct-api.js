@@ -96,9 +96,9 @@ export default async function handler(req, res) {
           results: [{
             id: '1',
             objects: [
-              { label: 'Person', confidence: 0.95 },
-              { label: 'Building', confidence: 0.87 },
-              { label: 'Car', confidence: 0.82 }
+              { label: 'person', confidence: 0.95 },
+              { label: 'building', confidence: 0.87 },
+              { label: 'car', confidence: 0.82 }
             ],
             caption: 'A person standing next to a building with a car parked nearby',
             text_detected: false
@@ -132,9 +132,9 @@ export default async function handler(req, res) {
           results: [{
             id: '1',
             objects: [
-              { label: 'Person', confidence: 0.95 },
-              { label: 'Building', confidence: 0.87 },
-              { label: 'Car', confidence: 0.82 }
+              { label: 'person', confidence: 0.95 },
+              { label: 'building', confidence: 0.87 },
+              { label: 'car', confidence: 0.82 }
             ],
             caption: 'A person standing next to a building with a car parked nearby',
             text_detected: false
@@ -148,9 +148,9 @@ export default async function handler(req, res) {
         results: [{
           id: '1',
           objects: [
-            { label: 'Person', confidence: 0.95 },
-            { label: 'Building', confidence: 0.87 },
-            { label: 'Car', confidence: 0.82 }
+            { label: 'person', confidence: 0.95 },
+            { label: 'building', confidence: 0.87 },
+            { label: 'car', confidence: 0.82 }
           ],
           caption: 'A person standing next to a building with a car parked nearby',
           text_detected: false

@@ -1,3 +1,12 @@
+---
+title: Smart Image Insights API
+emoji: 🔍
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # Smart Image Insights API
 
 This Space hosts the backend API for Smart Image Insights, a powerful image analysis tool.
@@ -39,13 +48,4 @@ This Space hosts the backend API for Smart Image Insights, a powerful image anal
 
 ## Deployment
 
-This Space is automatically deployed using Docker on Hugging Face Spaces infrastructure.
-
----
-title: Smart Image Insights API
-emoji: 🔍
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 7860
---- 
+This Space is automatically deployed using Docker on Hugging Face Spaces infrastructure. 
