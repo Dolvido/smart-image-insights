@@ -1,74 +1,82 @@
 # Smart Image Insights
 
-A modern web application that analyzes images using AI to provide object detection, image classification, and detailed descriptions.
+An image-analysis prototype with a Next.js upload interface and a Python/FastAPI inference service. The main page displays detected objects and a generated caption for each submitted image.
 
-## Features
+## What the current application does
 
-- **Multi-Image Upload**: Upload multiple images simultaneously for batch analysis
-- **Object Detection**: Identify objects in images using YOLOv5
-- **Image Classification**: Get accurate classification of image content 
-- **Image Description**: Generate natural language descriptions of image content
-- **Modern UI**: Beautiful, responsive interface built with Next.js and Tailwind CSS
+- Accepts multiple PNG, JPEG, or GIF uploads and analyzes each image on request.
+- Sends each upload directly from the browser to the configured FastAPI `/analyze` endpoint.
+- Displays object labels and confidence scores supplied by the detector. A missing score stays unavailable.
+- Displays the generated caption as an image description. Captions are not image classifications and have no classification confidence score.
+- Shows an error and allows retry when the request or a backend model fails. It does not substitute sample detections for failed inference.
 
-## Tech Stack
+Model outputs may be incorrect. This project does not include an accuracy benchmark or a production-readiness claim.
 
-### Frontend
-- **Framework**: Next.js (React)
-- **Styling**: Tailwind CSS with shadcn/ui components
-- **Animations**: Framer Motion
-- **State Management**: React Hooks
+## Implementation
 
-### Backend
-- **API**: FastAPI running on Hugging Face Spaces
-- **ML Models**:
-  - YOLOv5 for object detection
-  - BLIP for image captioning
-  - CLIP for semantic image understanding
-  - FAISS for vector search
+| Part | Current implementation |
+| --- | --- |
+| Frontend | Next.js 14.1.0, React 18.2, TypeScript, Tailwind CSS, Framer Motion |
+| Primary backend | `huggingface_space/app.py`: FastAPI, YOLOv5n detection, BLIP captioning, CLIP embeddings, FAISS search |
+| Earlier backend variant | `backend/main.py`: YOLOv5s, ViT-GPT2 captioning, CLIP/FAISS, plus a Hugging Face text-model Q&A endpoint |
+| Main page | Upload, detection labels/scores, and captions |
+| Supporting backend endpoints | `/search`, `/analyze-base64`, and `/health`; these are not all exposed by the main page |
 
-## Getting Started
+The primary backend keeps images and its search index in process memory. Restarting it loses that state. The earlier backend is a separate implementation, not an interchangeable deployment of the primary one.
 
-### Prerequisites
-- Node.js 16+ and npm
+## Local setup
 
-### Installation
+Use Node.js 22 LTS and npm for the frontend. The checked-in backend Dockerfile uses Python 3.9; the dependency pins are historical and have not been upgraded here.
 
-1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/smart-image-insights.git
+git clone https://github.com/Dolvido/smart-image-insights.git
 cd smart-image-insights
+npm ci
 ```
 
-2. Install dependencies
+Create `.env.local` in the repository root:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:7860
+```
+
+This value is the backend base URL, without `/analyze`. Restart the frontend after changing it. If unset, the main page uses the original Hugging Face Space address; that deployment's availability is not guaranteed.
+
+In a separate terminal, start the primary backend:
+
 ```bash
-npm install
+cd huggingface_space
+python -m venv .venv
+source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 7860
 ```
 
-3. Create a `.env.local` file with required environment variables:
-```
-NEXT_PUBLIC_API_URL=your_huggingface_space_endpoint
-```
+The backend downloads model files and YOLO source on initialization, so it needs network access, disk space, and enough memory for the models. Inspect `http://localhost:7860/health` for initialization errors before uploading an image. A health response alone does not prove every model loaded successfully.
 
-4. Start the development server
+Then run the frontend from the repository root:
+
 ```bash
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser
+Open [localhost:3000](http://localhost:3000). For a deployment, configure the backend URL and appropriate backend CORS origins. Images are sent to that backend for processing.
 
-## Usage
+## Focused validation
 
-1. Drag and drop images into the upload area or click to select files
-2. Click "Analyze Image" to process each image
-3. View the detailed analysis including:
-   - Identified objects with confidence scores
-   - Image classification with confidence score
-   - Natural language description of the image
+The response checks use the Node.js test runner and built-in TypeScript stripping (Node.js 22.6+):
 
-## Deployment
+```bash
+node --experimental-strip-types --test scripts/analysis-response.test.mjs
+```
 
-The frontend is deployed on Vercel, while the backend ML models run on Hugging Face Spaces.
+They cover real and absent detection scores, invalid responses, backend model errors, HTTP/network failures, and the configured upload URL. They do not run ML inference or validate model accuracy. A complete frontend build and backend inference should be checked in the target environment before deployment.
 
-## License
+## Development routes and limitations
 
-MIT
+- `src/app/api/analyze/route.ts` was an unused mock route. It now returns HTTP 410 with an explanatory error; the main UI uses the FastAPI service directly.
+- `/api/mock-analyze` is an explicit demo fixture marked `mock: true`. It does not inspect an image and is rejected by the main response parser.
+- `/test` and the other API adapters are development experiments, separate from the main upload flow.
+- The backend has no persistent image storage, authentication, or upload quotas. Its model-initialization and search-index behavior still need broader integration testing.
+- This cleanup does not upgrade the pinned framework/model dependencies or verify the existing hosted deployments.

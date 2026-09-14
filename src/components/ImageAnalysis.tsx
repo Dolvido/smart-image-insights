@@ -3,34 +3,9 @@
 import { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
+import { requestImageAnalysis, type AnalysisResult } from '@/lib/analysis-response';
 
-interface AnalysisResult {
-  object_detection?: Array<{
-    class: string;
-    confidence: number;
-  }>;
-  image_classification?: Array<{
-    label: string;
-    confidence: number;
-  }>;
-  text_detection?: {
-    text: string;
-  };
-}
-
-interface ApiResponse {
-  results?: Array<{
-    id: string;
-    imageUrl: string;
-    objects: Array<{
-      label: string;
-      confidence: number;
-      bbox?: [number, number, number, number];
-    }>;
-    caption: string;
-  }>;
-  errors?: string[] | null;
-}
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://dolvido-smart-image-insights.hf.space';
 
 interface ImageItem {
   id: string;
@@ -65,119 +40,28 @@ export default function ImageAnalysis() {
   });
 
   const handleAnalyze = async (imageId: string) => {
-    const imageIndex = images.findIndex(img => img.id === imageId);
-    if (imageIndex === -1) return;
-    
-    // Update loading state
-    setImages(prev => prev.map((img, idx) => 
-      idx === imageIndex ? { ...img, loading: true, error: null } : img
+    const image = images.find(item => item.id === imageId);
+    if (!image) return;
+
+    setImages(prev => prev.map(item =>
+      item.id === imageId ? { ...item, loading: true, error: null, results: null } : item
     ));
 
     try {
-      const imageToAnalyze = images[imageIndex];
-      console.log('Preparing to send image to API...', imageToAnalyze.file.name);
-      
-      // Create a FormData object instead of using base64
       const formData = new FormData();
-      formData.append('files', imageToAnalyze.file);
-      formData.append('analysis_type', 'all');
-      
-      console.log('Sending request to Hugging Face API...');
-      
-      // Send request directly to Hugging Face Space API with FormData
-      const response = await fetch('https://dolvido-smart-image-insights.hf.space/analyze', {
-        method: 'POST',
-        body: formData,
-      });
+      formData.append('files', image.file);
+      const results = await requestImageAnalysis(formData, API_BASE_URL);
 
-      console.log('Response status:', response.status);
-      
-      // Get the response text first for better error debugging
-      const responseText = await response.text();
-      
-      if (!response.ok) {
-        throw new Error(`Failed to analyze image (${response.status}): ${responseText.substring(0, 100)}`);
-      }
-      
-      // Parse the JSON response
-      let data: any;
-      try {
-        data = JSON.parse(responseText) as ApiResponse;
-        console.log('API Response Data:', data);
-        
-        // Check if data has the expected structure
-        if (!data.object_detection && !data.image_classification && !data.text_detection) {
-          console.warn('API response missing expected fields, transforming data structure...');
-          
-          // The API might return data in a different structure, try to adapt it
-          if (data.results && Array.isArray(data.results) && data.results.length > 0) {
-            // If the response has a results array, use the first item
-            const firstResult = data.results[0];
-            console.log('Using first item from results array:', firstResult);
-            
-            // Transform the data structure to match component expectations
-            const transformedData: AnalysisResult = {
-              object_detection: firstResult.objects && firstResult.objects.length > 0 
-                ? firstResult.objects.map((obj: any) => ({
-                    class: obj.label || obj.class,
-                    confidence: obj.confidence || 0.9
-                  })) 
-                : [],
-              
-              image_classification: [
-                { label: firstResult.caption || "Unknown", confidence: 0.95 }
-              ],
-              text_detection: {
-                text: firstResult.caption || "No text detected"
-              }
-            };
-            
-            console.log('Transformed data:', transformedData);
-            data = transformedData;
-          } else {
-            console.error('Cannot find valid results in the API response');
-            throw new Error('Invalid data structure in API response');
-          }
-        }
-        
-        console.log('Final processed data:', data);
-        
-        // Update the specific image with the results
-        setImages(prev => prev.map((img, idx) => 
-          idx === imageIndex ? { ...img, loading: false, results: data } : img
-        ));
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-      }
-      
+      // Match by stable ID so removing another upload cannot redirect this result.
+      setImages(prev => prev.map(item =>
+        item.id === imageId ? { ...item, loading: false, error: null, results } : item
+      ));
     } catch (err) {
-      console.error('API request error:', err);
-      
-      const errorMessage = `${err instanceof Error ? err.message : 'Failed to analyze image'} - Using mock data instead`;
-      
-      // Update with error but use mock data
-      setTimeout(() => {
-        const mockData = {
-          object_detection: [
-            { class: "person", confidence: 0.95 },
-            { class: "car", confidence: 0.87 },
-            { class: "tree", confidence: 0.76 }
-          ],
-          image_classification: [
-            { label: "urban scene", confidence: 0.92 }
-          ],
-          text_detection: {
-            text: "A person standing next to a car with trees in the background"
-          }
-        };
-        
-        console.log('Using mock data:', mockData);
-        
-        setImages(prev => prev.map((img, idx) => 
-          idx === imageIndex ? { ...img, loading: false, error: errorMessage, results: mockData } : img
-        ));
-      }, 1500);
+      const error = err instanceof Error ? err.message : 'Image analysis failed. Please try again.';
+      // A failed request leaves no result and keeps the Analyze button available for retry.
+      setImages(prev => prev.map(item =>
+        item.id === imageId ? { ...item, loading: false, error, results: null } : item
+      ));
     }
   };
 
@@ -238,7 +122,7 @@ export default function ImageAnalysis() {
 
             {/* Error */}
             {image.error && (
-              <div className="w-full mb-6 bg-red-900/20 text-red-400 p-4 rounded-lg border border-red-800">
+              <div role="alert" className="w-full mb-6 bg-red-900/20 text-red-400 p-4 rounded-lg border border-red-800">
                 {image.error}
               </div>
             )}
@@ -253,21 +137,21 @@ export default function ImageAnalysis() {
                   className="w-full space-y-6"
                 >
                   {/* Object Detection Results */}
-                  {image.results.object_detection && (
+                  {image.results.objects && (
                     <div className="bg-gray-900/50 rounded-lg shadow-md p-6">
                       <h3 className="text-xl font-semibold mb-4 text-white">Object Detection</h3>
-                      {image.results.object_detection.length === 0 ? (
-                        <p className="text-gray-400">No objects detected. YOLO model couldn't identify specific items in this image.</p>
+                      {image.results.objects.length === 0 ? (
+                        <p className="text-gray-400">No objects were returned by the detector.</p>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {image.results.object_detection.map((obj, index) => (
+                          {image.results.objects.map((obj, index) => (
                             <div
                               key={index}
                               className="bg-gray-800 p-4 rounded-lg flex justify-between items-center border-l-4 border-blue-500"
                             >
-                              <span className="font-medium text-gray-200 capitalize">{obj.class}</span>
+                              <span className="font-medium text-gray-200 capitalize">{obj.label}</span>
                               <span className="text-gray-400 bg-gray-700 px-2 py-1 rounded-full text-sm">
-                                {(obj.confidence * 100).toFixed(0)}%
+                                {obj.confidence === undefined ? 'Score unavailable' : `${(obj.confidence * 100).toFixed(0)}%`}
                               </span>
                             </div>
                           ))}
@@ -276,36 +160,13 @@ export default function ImageAnalysis() {
                     </div>
                   )}
 
-                  {/* Image Classification Results */}
-                  {image.results.image_classification && (
-                    <div className="bg-gray-900/50 rounded-lg shadow-md p-6">
-                      <h3 className="text-xl font-semibold mb-4 text-white">Image Classification</h3>
-                      <div className="space-y-3">
-                        {image.results.image_classification.map((pred, index) => (
-                          <div key={index} className="w-full">
-                            <div className="flex justify-between mb-1">
-                              <span className="font-medium text-gray-200">{pred.label}</span>
-                              <span className="text-gray-400 text-sm">{(pred.confidence * 100).toFixed(0)}%</span>
-                            </div>
-                            <div className="w-full bg-gray-800 rounded-full h-2.5">
-                              <div 
-                                className="bg-blue-600 h-2.5 rounded-full" 
-                                style={{ width: `${(pred.confidence * 100)}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Text Detection Results */}
-                  {image.results.text_detection && (
+                  {/* Model-generated caption; no classification confidence is supplied. */}
+                  {image.results.caption && (
                     <div className="bg-gray-900/50 rounded-lg shadow-md p-6">
                       <h3 className="text-xl font-semibold mb-4 text-white">Image Description</h3>
                       <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-purple-500">
                         <p className="text-gray-300 italic">
-                          "{image.results.text_detection.text}"
+                          {image.results.caption}
                         </p>
                       </div>
                     </div>

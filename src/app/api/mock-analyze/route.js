@@ -6,9 +6,11 @@ export const runtime = 'nodejs';
 // Make sure this is dynamic (not cached)
 export const dynamic = 'force-dynamic';
 
-export async function POST(request) {
+export async function POST() {
   // Return a hard-coded mock response
   return NextResponse.json({
+    mock: true,
+    notice: 'Demo fixture only. No image was analyzed.',
     results: [{
       id: '1',
       objects: [
